@@ -94,7 +94,17 @@ pub async fn export_video(params: ExportParams) -> Result<(), String> {
     let mut segment_paths: Vec<String> = Vec::new();
 
     let mut clips = params.clips.clone();
-    clips.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap_or(std::cmp::Ordering::Equal));
+    clips.sort_by(
+        |a, b| match (a.start_time.is_nan(), b.start_time.is_nan()) {
+            (true, true) => std::cmp::Ordering::Equal,
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            (false, false) => a
+                .start_time
+                .partial_cmp(&b.start_time)
+                .unwrap_or(std::cmp::Ordering::Equal),
+        },
+    );
 
     for (i, clip) in clips.iter().enumerate() {
         if !Path::new(&clip.asset_path).exists() {
@@ -109,7 +119,8 @@ pub async fn export_video(params: ExportParams) -> Result<(), String> {
 
         let seg_path = tmp_dir.join(format!("seg_{:04}.mp4", i));
         let seg_str = seg_path.to_string_lossy().to_string();
-        let (video_filter, audio_filter) = build_effect_filters(&clip.effects, params.width, params.height);
+        let (video_filter, audio_filter) =
+            build_effect_filters(&clip.effects, params.width, params.height);
 
         let mut args = vec![
             "-y".to_string(),

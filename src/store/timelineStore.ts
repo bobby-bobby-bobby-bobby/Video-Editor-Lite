@@ -9,6 +9,7 @@ const DEFAULT_TRACKS: TimelineTrack[] = [
   { id: "track-v2", label: "Video 2", type: "video", muted: false, locked: false, height: 60 },
   { id: "track-a1", label: "Audio 1", type: "audio", muted: false, locked: false, height: 40 },
 ];
+const MIN_CLIP_DURATION = 0.05;
 
 interface TimelineState {
   clips: TimelineClip[];
@@ -98,7 +99,7 @@ export const useTimelineStore = create<TimelineState>()(
         const clip = s.clips.find((c) => c.id === clipId);
         if (!clip) return;
         const safeIn = Math.max(0, inPoint);
-        const safeOut = Math.max(safeIn + 0.05, outPoint);
+        const safeOut = Math.max(safeIn + MIN_CLIP_DURATION, outPoint);
         clip.inPoint = safeIn;
         clip.outPoint = safeOut;
         clip.endTime = clip.startTime + (safeOut - safeIn);
@@ -158,7 +159,7 @@ export const useTimelineStore = create<TimelineState>()(
           trackClips.sort((a, b) => a.startTime - b.startTime);
           let cursor = 0;
           trackClips.forEach((clip) => {
-            const dur = Math.max(0.05, clip.outPoint - clip.inPoint);
+            const dur = Math.max(MIN_CLIP_DURATION, clip.outPoint - clip.inPoint);
             clip.startTime = cursor;
             clip.endTime = cursor + dur;
             cursor = clip.endTime;

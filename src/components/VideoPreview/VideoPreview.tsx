@@ -5,6 +5,8 @@ import { useTimelineStore } from "../../store/timelineStore";
 import { useEffectsStore } from "../../store/effectsStore";
 import { formatTime } from "../../utils/formatTime";
 
+const SEEK_TOLERANCE = 0.15;
+
 /** Video / audio preview panel. Prioritises timeline context and uses proxies when available. */
 export const VideoPreview: React.FC = () => {
   const assets = useMediaStore((s) => s.assets);
@@ -72,7 +74,7 @@ export const VideoPreview: React.FC = () => {
   useEffect(() => {
     const v = mediaRef.current;
     if (!v) return;
-    if (Math.abs(v.currentTime - expectedStartTime) < 0.15) return;
+    if (Math.abs(v.currentTime - expectedStartTime) < SEEK_TOLERANCE) return;
     v.currentTime = expectedStartTime;
   }, [expectedStartTime, srcUrl]);
 
