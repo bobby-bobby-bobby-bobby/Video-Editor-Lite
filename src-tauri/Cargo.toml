@@ -1,0 +1,37 @@
+[package]
+name = "video-editor-lite"
+version = "0.1.0"
+description = "Video Editor Lite - A minimal desktop video editor"
+authors = []
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = [
+    "dialog-open",
+    "dialog-save",
+    "fs-all",
+    "path-all",
+    "shell-open",
+    "window-close",
+    "window-minimize",
+    "window-maximize",
+    "window-unmaximize",
+    "window-start-dragging",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.6", features = ["v4"] }
+tokio = { version = "1", features = ["full"] }
+walkdir = "2.4"
+which = "6.0"
+anyhow = "1.0"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
+# See: https://tauri.app/v1/references/webview-versions
+custom-protocol = ["tauri/custom-protocol"]
