@@ -59,9 +59,7 @@ export const useMediaStore = create<MediaState>()(
         );
       });
 
-      for (const file of mediaFiles) {
-        await get().addAssetFromFile(file);
-      }
+      await Promise.all(mediaFiles.map((file) => get().addAssetFromFile(file)));
 
       useProjectStore.getState().markDirty();
     },
@@ -80,12 +78,12 @@ export const useMediaStore = create<MediaState>()(
       if (!chosen) return;
       const files = Array.isArray(chosen) ? chosen : [chosen];
 
-      for (const path of files) {
+      await Promise.all(files.map(async (path) => {
         const parts = path.replace(/\\/g, "/").split("/");
         const name = parts[parts.length - 1];
         const ext = name.split(".").pop() ?? "";
         await get().addAssetFromFile({ name, path, size: 0, extension: ext, isDirectory: false });
-      }
+      }));
 
       useProjectStore.getState().markDirty();
     },
@@ -164,13 +162,15 @@ export const useMediaStore = create<MediaState>()(
         s.selectedAssetId = id;
       }),
 
-    updateProxyStatus: (id, status, proxyPath) =>
+    updateProxyStatus: (id, status, proxyPath) => {
       set((s) => {
         const asset = s.assets.find((a) => a.id === id);
         if (asset) {
           asset.proxyStatus = status;
           if (proxyPath) asset.proxyPath = proxyPath;
         }
-      }),
+      });
+      useProjectStore.getState().markDirty();
+    },
   }))
 );

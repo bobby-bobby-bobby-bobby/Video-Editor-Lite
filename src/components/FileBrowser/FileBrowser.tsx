@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useMediaStore } from "../../store/mediaStore";
+import { useTimelineStore } from "../../store/timelineStore";
 import { MediaAsset } from "../../types";
 import { formatBytes, formatTime } from "../../utils/formatTime";
 
@@ -10,6 +11,7 @@ export const FileBrowser: React.FC = () => {
   const selectAsset = useMediaStore((s) => s.selectAsset);
   const importFolder = useMediaStore((s) => s.importFolder);
   const importFiles = useMediaStore((s) => s.importFiles);
+  const addClipFromAsset = useTimelineStore((s) => s.addClipFromAsset);
 
   const [filter, setFilter] = useState("");
 
@@ -59,6 +61,7 @@ export const FileBrowser: React.FC = () => {
             asset={asset}
             selected={asset.id === selectedAssetId}
             onSelect={() => selectAsset(asset.id)}
+            onAddToTimeline={() => addClipFromAsset(asset, 0)}
           />
         ))}
       </div>
@@ -75,7 +78,8 @@ const AssetRow: React.FC<{
   asset: MediaAsset;
   selected: boolean;
   onSelect: () => void;
-}> = ({ asset, selected, onSelect }) => {
+  onAddToTimeline: () => void;
+}> = ({ asset, selected, onSelect, onAddToTimeline }) => {
   const typeIcon =
     asset.type === "video" ? "🎬" : asset.type === "audio" ? "🎵" : "🖼️";
 
@@ -91,9 +95,11 @@ const AssetRow: React.FC<{
   return (
     <div
       onClick={onSelect}
+      onDoubleClick={onAddToTimeline}
       className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors border-b border-[#1a1a2e] ${
         selected ? "bg-[#e94560]/20 text-[#e0e0e0]" : "hover:bg-[#0f3460]/40 text-[#ccc]"
       }`}
+      title="Double-click to add to timeline"
     >
       <span className="shrink-0">{typeIcon}</span>
       <div className="flex-1 overflow-hidden">

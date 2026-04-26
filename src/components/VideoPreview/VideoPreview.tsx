@@ -1,150 +1,226 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { convertFileSrc } from "@tauri-apps/api/tauri";
 import { useMediaStore } from "../../store/mediaStore";
 import { useTimelineStore } from "../../store/timelineStore";
+import { useEffectsStore } from "../../store/effectsStore";
 import { formatTime } from "../../utils/formatTime";
 
-/** Video / audio preview panel. Plays the selected asset or the clip at the playhead. */
+/** Video / audio preview panel. Prioritises timeline context and uses proxies when available. */
 export const VideoPreview: React.FC = () => {
   const assets = useMediaStore((s) => s.assets);
   const selectedAssetId = useMediaStore((s) => s.selectedAssetId);
+  const clips = useTimelineStore((s) => s.clips);
+  const selectedClipId = useTimelineStore((s) => s.selectedClipId);
   const playhead = useTimelineStore((s) => s.playhead);
   const setPlayhead = useTimelineStore((s) => s.setPlayhead);
+  const getClipEffects = useEffectsStore((s) => s.getClipEffects);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  // Determine which asset to preview (selected asset, or asset at playhead)
-  const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? null;
-
-  // Use proxy path if available and ready, otherwise fall back to original
-  const resolveSourcePath = useCallback(
-    (asset: typeof selectedAsset): string | null => {
-      if (!asset) return null;
-      if (asset.proxyStatus === "ready" && asset.proxyPath) {
-        return convertFileSrc(asset.proxyPath);
-      }
-      return convertFileSrc(asset.path);
-    },
-    []
+  const selectedClip = useMemo(
+    () => clips.find((c) => c.id === selectedClipId) ?? null,
+    [clips, selectedClipId]
   );
+  const clipAtPlayhead = useMemo(() => {
+    const candidates = clips.filter((c) => playhead >= c.startTime && playhead < c.endTime);
+    return candidates.sort((a, b) => a.trackIndex - b.trackIndex)[0] ?? null;
+  }, [clips, playhead]);
+  const activeClip = selectedClip ?? clipAtPlayhead;
 
-  const srcUrl = resolveSourcePath(selectedAsset);
+  const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? null;
+  const clipAsset = activeClip ? assets.find((a) => a.id === activeClip.assetId) ?? null : null;
+  const activeAsset = clipAsset ?? selectedAsset;
+  const clipEffects = activeClip ? getClipEffects(activeClip.id) : [];
 
-  // Sync external playhead changes to the video element
+  const srcUrl = useMemo(() => {
+    if (!activeAsset) return null;
+    if (activeAsset.proxyStatus === "ready" && activeAsset.proxyPath) {
+      return convertFileSrc(activeAsset.proxyPath);
+    }
+    return convertFileSrc(activeAsset.path);
+  }, [activeAsset]);
+
+  const speedEffect = clipEffects.find((e) => e.enabled && e.type === "speed");
+  const playbackRate = Math.max(
+    0.1,
+    Math.min(4, speedEffect?.params.multiplier ?? 1)
+  );
+  const brightness = clipEffects
+    .filter((e) => e.enabled && e.type === "brightness")
+    .reduce((acc, e) => acc + (e.params.value ?? 0), 0);
+  const contrast = clipEffects
+    .filter((e) => e.enabled && e.type === "contrast")
+    .reduce((acc, e) => acc + (e.params.value ?? 0), 0);
+  const blur = clipEffects
+    .filter((e) => e.enabled && e.type === "blur")
+    .reduce((acc, e) => acc + (e.params.radius ?? 0), 0);
+  const previewFilter = `brightness(${Math.max(0, 1 + brightness)}) contrast(${Math.max(
+    0,
+    1 + contrast
+  )}) blur(${Math.max(0, blur)}px)`;
+
+  const expectedStartTime = useMemo(() => {
+    if (!activeClip) return 0;
+    return activeClip.inPoint + Math.max(0, playhead - activeClip.startTime);
+  }, [activeClip, playhead]);
+
   useEffect(() => {
-    const v = videoRef.current;
-    if (!v || Math.abs(v.currentTime - playhead) < 0.2) return;
-    v.currentTime = playhead;
-  }, [playhead]);
+    const v = mediaRef.current;
+    if (!v) return;
+    if (Math.abs(v.currentTime - expectedStartTime) < 0.15) return;
+    v.currentTime = expectedStartTime;
+  }, [expectedStartTime, srcUrl]);
+
+  useEffect(() => {
+    const v = mediaRef.current;
+    if (!v) return;
+    v.playbackRate = playbackRate;
+  }, [playbackRate, srcUrl]);
+
+  useEffect(() => {
+    setPreviewError(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+  }, [srcUrl]);
 
   const handleTimeUpdate = () => {
-    const v = videoRef.current;
+    const v = mediaRef.current;
     if (!v) return;
     setCurrentTime(v.currentTime);
-    setPlayhead(v.currentTime);
+    if (activeClip) {
+      const timelineTime = activeClip.startTime + (v.currentTime - activeClip.inPoint);
+      setPlayhead(timelineTime);
+      if (timelineTime >= activeClip.endTime) {
+        v.pause();
+        setIsPlaying(false);
+      }
+    } else {
+      setPlayhead(v.currentTime);
+    }
   };
 
   const handleLoadedMetadata = () => {
-    const v = videoRef.current;
+    const v = mediaRef.current;
     if (!v) return;
-    setDuration(v.duration);
-    setCurrentTime(0);
+    const clipDuration = activeClip ? Math.max(0.05, activeClip.outPoint - activeClip.inPoint) : v.duration;
+    setDuration(clipDuration);
+    setCurrentTime(activeClip ? expectedStartTime : 0);
   };
 
-  const togglePlay = () => {
-    const v = videoRef.current;
+  const togglePlay = async () => {
+    const v = mediaRef.current;
     if (!v) return;
-    if (v.paused) {
-      v.play();
-      setIsPlaying(true);
-    } else {
-      v.pause();
-      setIsPlaying(false);
+    try {
+      if (v.paused) {
+        await v.play();
+        setIsPlaying(true);
+      } else {
+        v.pause();
+        setIsPlaying(false);
+      }
+    } catch (e) {
+      setPreviewError(`Playback failed: ${String(e)}`);
     }
   };
 
   const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
     const t = parseFloat(e.target.value);
-    setCurrentTime(t);
-    setPlayhead(t);
-    if (videoRef.current) videoRef.current.currentTime = t;
+    if (!mediaRef.current) return;
+
+    if (activeClip) {
+      const targetTimeline = activeClip.startTime + t;
+      const targetMedia = activeClip.inPoint + t;
+      setPlayhead(targetTimeline);
+      mediaRef.current.currentTime = targetMedia;
+      setCurrentTime(targetMedia);
+    } else {
+      setPlayhead(t);
+      mediaRef.current.currentTime = t;
+      setCurrentTime(t);
+    }
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
     setVolume(v);
-    if (videoRef.current) videoRef.current.volume = v;
+    if (mediaRef.current) mediaRef.current.volume = v;
   };
 
-  const handleEnded = () => setIsPlaying(false);
-
-  const isVideo = selectedAsset?.type === "video";
-  const isAudio = selectedAsset?.type === "audio";
+  const isVideo = activeAsset?.type === "video";
+  const isAudio = activeAsset?.type === "audio";
 
   return (
     <div className="flex flex-col h-full bg-[#0f0f1e] text-xs">
-      {/* Video / Audio area */}
       <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black">
-        {!selectedAsset && (
+        {!activeAsset && (
           <div className="text-[#555] flex flex-col items-center gap-2">
             <span className="text-4xl">🎬</span>
-            <span>Select a clip to preview</span>
+            <span>Select media or place the playhead on a clip</span>
           </div>
         )}
 
-        {selectedAsset && isVideo && srcUrl && (
+        {activeAsset && isVideo && srcUrl && (
           <video
-            ref={videoRef}
+            ref={mediaRef}
             src={srcUrl}
             className="max-w-full max-h-full"
+            style={{ filter: previewFilter }}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
-            onEnded={handleEnded}
+            onEnded={() => setIsPlaying(false)}
+            onError={() => setPreviewError("Missing or unreadable media file")}
           />
         )}
 
-        {selectedAsset && isAudio && srcUrl && (
+        {activeAsset && isAudio && srcUrl && (
           <div className="flex flex-col items-center gap-4 text-[#888]">
             <span className="text-6xl">🎵</span>
-            <span className="text-sm text-[#e0e0e0]">{selectedAsset.name}</span>
+            <span className="text-sm text-[#e0e0e0]">{activeAsset.name}</span>
             <audio
-              ref={videoRef as React.RefObject<HTMLAudioElement>}
+              ref={mediaRef as React.RefObject<HTMLAudioElement>}
               src={srcUrl}
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
-              onEnded={handleEnded}
+              onEnded={() => setIsPlaying(false)}
+              onError={() => setPreviewError("Missing or unreadable media file")}
             />
           </div>
         )}
 
-        {selectedAsset && selectedAsset.type === "image" && srcUrl && (
+        {activeAsset && activeAsset.type === "image" && srcUrl && (
           <img
             src={srcUrl}
-            alt={selectedAsset.name}
+            alt={activeAsset.name}
             className="max-w-full max-h-full object-contain"
+            style={{ filter: previewFilter }}
+            onError={() => setPreviewError("Missing or unreadable media file")}
           />
         )}
       </div>
 
-      {/* Controls */}
-      {selectedAsset && (isVideo || isAudio) && (
+      {previewError && (
+        <div className="shrink-0 px-3 py-1 bg-red-950/40 text-red-300 border-t border-red-800/40">
+          {previewError}
+        </div>
+      )}
+
+      {activeAsset && (isVideo || isAudio) && (
         <div className="shrink-0 px-3 py-2 bg-[#16213e] border-t border-[#2a2a4a] space-y-1.5">
-          {/* Scrub bar */}
           <input
             type="range"
             min={0}
             max={duration || 100}
             step={0.05}
-            value={currentTime}
+            value={activeClip ? Math.max(0, currentTime - activeClip.inPoint) : currentTime}
             onChange={handleScrub}
             className="w-full h-1.5 accent-[#e94560] cursor-pointer"
           />
 
-          {/* Playback controls */}
           <div className="flex items-center gap-3">
             <button
               onClick={togglePlay}
@@ -154,12 +230,17 @@ export const VideoPreview: React.FC = () => {
             </button>
 
             <span className="text-[#888] font-mono text-[10px]">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatTime(activeClip ? Math.max(0, currentTime - activeClip.inPoint) : currentTime)} / {formatTime(duration)}
             </span>
+
+            {activeAsset.type === "video" && (
+              <span className="text-[10px] text-[#666]">
+                {activeAsset.proxyStatus === "ready" ? "Proxy Preview" : "Original Preview"}
+              </span>
+            )}
 
             <div className="flex-1" />
 
-            {/* Volume */}
             <span className="text-[#555]">🔊</span>
             <input
               type="range"

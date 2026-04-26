@@ -8,7 +8,7 @@ const App: React.FC = () => {
 
   // Attempt to restore last project on startup
   useEffect(() => {
-    loadProject();
+    loadProject(undefined, true);
   }, [loadProject]);
 
   // Enable autosave

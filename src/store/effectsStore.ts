@@ -33,6 +33,17 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
     params: [{ key: "multiplier", label: "Multiplier", min: 0.1, max: 4, step: 0.1, default: 1 }],
   },
   {
+    type: "greenscreen",
+    label: "Greenscreen",
+    params: [
+      { key: "keyR", label: "Key R", min: 0, max: 255, step: 1, default: 0 },
+      { key: "keyG", label: "Key G", min: 0, max: 255, step: 1, default: 255 },
+      { key: "keyB", label: "Key B", min: 0, max: 255, step: 1, default: 0 },
+      { key: "threshold", label: "Threshold", min: 0, max: 1, step: 0.01, default: 0.2 },
+      { key: "softness", label: "Edge", min: 0, max: 1, step: 0.01, default: 0.08 },
+    ],
+  },
+  {
     type: "grayscale",
     label: "Grayscale",
     params: [{ key: "amount", label: "Amount", min: 0, max: 1, step: 0.01, default: 0 }],

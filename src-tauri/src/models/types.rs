@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A file/directory entry returned by scan_folder
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -25,6 +26,16 @@ pub struct VideoMetadata {
     pub size: u64,
 }
 
+/// A single effect instance applied to an export clip
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportEffect {
+    #[serde(rename = "type")]
+    pub effect_type: String,
+    pub enabled: bool,
+    pub params: HashMap<String, f64>,
+}
+
 /// A single clip descriptor used during export
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +45,8 @@ pub struct ExportClip {
     pub out_point: f64,
     pub track_index: u32,
     pub start_time: f64,
+    #[serde(default)]
+    pub effects: Vec<ExportEffect>,
 }
 
 /// Parameters for the export command

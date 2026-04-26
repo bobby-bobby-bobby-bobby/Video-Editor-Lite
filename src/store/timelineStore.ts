@@ -32,6 +32,7 @@ interface TimelineState {
   setTimeline: (clips: TimelineClip[], tracks: TimelineTrack[]) => void;
   clearTimeline: () => void;
   computeDuration: () => void;
+  arrangeSequentially: (trackIndex?: number) => void;
 }
 
 export const useTimelineStore = create<TimelineState>()(
@@ -96,9 +97,11 @@ export const useTimelineStore = create<TimelineState>()(
       set((s) => {
         const clip = s.clips.find((c) => c.id === clipId);
         if (!clip) return;
-        clip.inPoint = inPoint;
-        clip.outPoint = outPoint;
-        clip.endTime = clip.startTime + (outPoint - inPoint);
+        const safeIn = Math.max(0, inPoint);
+        const safeOut = Math.max(safeIn + 0.05, outPoint);
+        clip.inPoint = safeIn;
+        clip.outPoint = safeOut;
+        clip.endTime = clip.startTime + (safeOut - safeIn);
       });
       get().computeDuration();
       useProjectStore.getState().markDirty();
@@ -140,6 +143,30 @@ export const useTimelineStore = create<TimelineState>()(
       set((s) => {
         s.duration = maxEnd;
       });
+    },
+
+    arrangeSequentially: (trackIndex) => {
+      set((s) => {
+        const groups = new Map<number, TimelineClip[]>();
+        s.clips.forEach((clip) => {
+          if (trackIndex !== undefined && clip.trackIndex !== trackIndex) return;
+          if (!groups.has(clip.trackIndex)) groups.set(clip.trackIndex, []);
+          groups.get(clip.trackIndex)!.push(clip);
+        });
+
+        groups.forEach((trackClips) => {
+          trackClips.sort((a, b) => a.startTime - b.startTime);
+          let cursor = 0;
+          trackClips.forEach((clip) => {
+            const dur = Math.max(0.05, clip.outPoint - clip.inPoint);
+            clip.startTime = cursor;
+            clip.endTime = cursor + dur;
+            cursor = clip.endTime;
+          });
+        });
+      });
+      get().computeDuration();
+      useProjectStore.getState().markDirty();
     },
   }))
 );
