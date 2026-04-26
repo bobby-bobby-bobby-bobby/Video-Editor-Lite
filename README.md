@@ -129,4 +129,3 @@ When a video asset is imported the frontend immediately calls `generate_proxy` o
 
 ### Export Pipeline
 `export_video` in Rust extracts each clip as a separate trimmed MP4 segment, writes an ffmpeg concat list, then does a final pass to produce the output file. The original (non-proxy) files are always used for export.
-Lite Video Editor
