@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { invoke } from "@tauri-apps/api/tauri";
-import { save } from "@tauri-apps/api/dialog";
+import { open, save } from "@tauri-apps/api/dialog";
 import { ProjectFile, ProjectMetadata } from "../types";
 import { generateId } from "../utils/id";
 import { useMediaStore } from "./mediaStore";
@@ -19,7 +19,7 @@ interface ProjectState {
   // Actions
   newProject: () => void;
   saveProject: (asNew?: boolean) => Promise<void>;
-  loadProject: (filePath?: string) => Promise<void>;
+  loadProject: (filePath?: string, recoverLastSession?: boolean) => Promise<void>;
   markDirty: () => void;
 }
 
@@ -94,14 +94,24 @@ export const useProjectStore = create<ProjectState>()(
       }
     },
 
-    loadProject: async (filePath?: string) => {
+    loadProject: async (filePath?: string, recoverLastSession = false) => {
       let targetPath = filePath;
 
       if (!targetPath) {
-        // Try recovering from last session
-        const lastPath = localStorage.getItem(AUTOSAVE_KEY);
-        if (!lastPath) return;
-        targetPath = lastPath;
+        if (recoverLastSession) {
+          const lastPath = localStorage.getItem(AUTOSAVE_KEY);
+          if (!lastPath) return;
+          targetPath = lastPath;
+        } else {
+          const chosen = await open({
+            title: "Open Project",
+            multiple: false,
+            directory: false,
+            filters: [{ name: "Video Editor Lite Project", extensions: ["velp"] }],
+          });
+          if (!chosen || Array.isArray(chosen)) return;
+          targetPath = chosen;
+        }
       }
 
       try {
@@ -118,6 +128,9 @@ export const useProjectStore = create<ProjectState>()(
         useEffectsStore.getState().setEffects(projectFile.effects ?? []);
       } catch (err) {
         console.warn("Could not load project:", err);
+        if (recoverLastSession) {
+          localStorage.removeItem(AUTOSAVE_KEY);
+        }
       }
     },
 

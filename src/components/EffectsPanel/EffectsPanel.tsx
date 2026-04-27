@@ -98,6 +98,13 @@ const EffectRow: React.FC<{
   const definition = EFFECT_DEFINITIONS.find((d) => d.type === effect.type);
   if (!definition) return null;
 
+  const keyR = Math.round(effect.params.keyR ?? 0);
+  const keyG = Math.round(effect.params.keyG ?? 255);
+  const keyB = Math.round(effect.params.keyB ?? 0);
+  const keyColor = `#${[keyR, keyG, keyB]
+    .map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0"))
+    .join("")}`;
+
   return (
     <div
       className={`border-b border-[#2a2a4a] ${
@@ -142,8 +149,34 @@ const EffectRow: React.FC<{
       </div>
 
       {/* Parameters */}
+      {effect.enabled && effect.type === "greenscreen" && (
+        <div className="px-3 py-1.5 flex items-center gap-2">
+          <label className="text-[#888] w-16 shrink-0 truncate">Key Color</label>
+          <input
+            type="color"
+            value={keyColor}
+            onChange={(e) => {
+              const v = e.target.value;
+              const r = parseInt(v.slice(1, 3), 16);
+              const g = parseInt(v.slice(3, 5), 16);
+              const b = parseInt(v.slice(5, 7), 16);
+              onParamChange("keyR", r);
+              onParamChange("keyG", g);
+              onParamChange("keyB", b);
+            }}
+            className="h-6 w-10 p-0 border border-[#2a2a4a] bg-transparent rounded"
+          />
+          <span className="text-[#666] text-[10px]">{keyColor.toUpperCase()}</span>
+        </div>
+      )}
       {effect.enabled &&
-        definition.params.map((param) => (
+        definition.params
+          .filter((param) =>
+            effect.type === "greenscreen"
+              ? param.key !== "keyR" && param.key !== "keyG" && param.key !== "keyB"
+              : true
+          )
+          .map((param) => (
           <div key={param.key} className="px-3 py-1.5 flex items-center gap-2">
             <label className="text-[#888] w-16 shrink-0 truncate">{param.label}</label>
             <input

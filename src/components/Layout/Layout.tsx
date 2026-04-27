@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React from "react";
 import { FileBrowser } from "../FileBrowser/FileBrowser";
-import { MediaGrid } from "../MediaGrid/MediaGrid";
 import { VideoPreview } from "../VideoPreview/VideoPreview";
 import { Timeline } from "../Timeline/Timeline";
 import { EffectsPanel } from "../EffectsPanel/EffectsPanel";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { useProjectStore } from "../../store/projectStore";
 import { useMediaStore } from "../../store/mediaStore";
+import { useExportStore } from "../../store/exportStore";
 
 export const Layout: React.FC = () => {
   useKeyboard();
@@ -19,8 +19,11 @@ export const Layout: React.FC = () => {
   const loadProject = useProjectStore((s) => s.loadProject);
   const importFolder = useMediaStore((s) => s.importFolder);
   const importFiles = useMediaStore((s) => s.importFiles);
-
-  const [showMediaGrid, setShowMediaGrid] = useState(true);
+  const exportProject = useExportStore((s) => s.exportProject);
+  const isExporting = useExportStore((s) => s.isExporting);
+  const exportError = useExportStore((s) => s.error);
+  const resolution = useExportStore((s) => s.resolution);
+  const setResolution = useExportStore((s) => s.setResolution);
 
   return (
     <div className="flex flex-col h-screen bg-[#1a1a2e] text-[#e0e0e0] overflow-hidden">
@@ -38,6 +41,21 @@ export const Layout: React.FC = () => {
           <MenuButton onClick={importFolder}>Import Folder</MenuButton>
           <MenuButton onClick={importFiles}>Import Files</MenuButton>
         </div>
+        <div className="w-px h-4 bg-[#2a2a4a]" />
+        <div className="flex items-center gap-1">
+          <select
+            value={resolution}
+            onChange={(e) => setResolution(e.target.value as typeof resolution)}
+            className="bg-[#1a1a2e] border border-[#2a2a4a] rounded px-1 py-0.5 text-[10px]"
+          >
+            <option value="1920x1080">1080p</option>
+            <option value="1280x720">720p</option>
+            <option value="854x480">480p</option>
+          </select>
+          <MenuButton onClick={exportProject} disabled={isExporting}>
+            {isExporting ? "Exporting…" : "Export"}
+          </MenuButton>
+        </div>
         <div className="flex-1" />
         <span className="text-[#888] truncate max-w-[200px]">
           {projectName}
@@ -53,33 +71,10 @@ export const Layout: React.FC = () => {
           <FileBrowser />
         </div>
 
-        {/* Centre: Media Grid + Preview */}
+        {/* Centre: Preview + Timeline */}
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Toggle bar */}
-          <div className="flex text-xs border-b border-[#2a2a4a] bg-[#16213e] shrink-0">
-            <TabButton active={showMediaGrid} onClick={() => setShowMediaGrid(true)}>
-              Media
-            </TabButton>
-            <TabButton active={!showMediaGrid} onClick={() => setShowMediaGrid(false)}>
-              Preview
-            </TabButton>
-          </div>
-
-          <div className="flex flex-1 overflow-hidden">
-            {showMediaGrid ? (
-              <div className="flex-1 overflow-auto">
-                <MediaGrid />
-              </div>
-            ) : (
-              <div className="flex-1 overflow-hidden">
-                <VideoPreview />
-              </div>
-            )}
-
-            {/* Always-visible preview alongside media grid on wide screens */}
-            <div className="hidden xl:block w-80 shrink-0 border-l border-[#2a2a4a]">
-              <VideoPreview />
-            </div>
+          <div className="flex-1 overflow-hidden">
+            <VideoPreview />
           </div>
 
           {/* ── Timeline ── */}
@@ -93,33 +88,25 @@ export const Layout: React.FC = () => {
           <EffectsPanel />
         </div>
       </div>
+      {exportError && (
+        <div className="px-3 py-1.5 text-[11px] text-red-300 bg-red-950/40 border-t border-red-800/40">
+          Export failed: {exportError}
+        </div>
+      )}
     </div>
   );
 };
 
-const MenuButton: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({
+const MenuButton: React.FC<{ onClick: () => void; disabled?: boolean; children: React.ReactNode }> = ({
   onClick,
+  disabled = false,
   children,
 }) => (
   <button
     onClick={onClick}
-    className="px-2 py-1 rounded hover:bg-[#2a2a4a] text-[#e0e0e0] transition-colors"
-  >
-    {children}
-  </button>
-);
-
-const TabButton: React.FC<{
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}> = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`px-4 py-1.5 transition-colors border-b-2 ${
-      active
-        ? "border-[#e94560] text-[#e0e0e0]"
-        : "border-transparent text-[#888] hover:text-[#e0e0e0]"
+    disabled={disabled}
+    className={`px-2 py-1 rounded text-[#e0e0e0] transition-colors ${
+      disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-[#2a2a4a]"
     }`}
   >
     {children}

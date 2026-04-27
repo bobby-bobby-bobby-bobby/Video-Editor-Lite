@@ -9,6 +9,7 @@ const DEFAULT_TRACKS: TimelineTrack[] = [
   { id: "track-v2", label: "Video 2", type: "video", muted: false, locked: false, height: 60 },
   { id: "track-a1", label: "Audio 1", type: "audio", muted: false, locked: false, height: 40 },
 ];
+export const MIN_CLIP_DURATION = 0.05;
 
 interface TimelineState {
   clips: TimelineClip[];
@@ -26,12 +27,14 @@ interface TimelineState {
   removeClip: (clipId: string) => void;
   moveClip: (clipId: string, newStartTime: number, newTrackIndex?: number) => void;
   trimClip: (clipId: string, inPoint: number, outPoint: number) => void;
+  trimClipStart: (clipId: string, inPoint: number, startTime: number) => void;
   selectClip: (id: string | null) => void;
   setPlayhead: (time: number) => void;
   setZoom: (pps: number) => void;
   setTimeline: (clips: TimelineClip[], tracks: TimelineTrack[]) => void;
   clearTimeline: () => void;
   computeDuration: () => void;
+  arrangeSequentially: (trackIndex?: number) => void;
 }
 
 export const useTimelineStore = create<TimelineState>()(
@@ -96,9 +99,25 @@ export const useTimelineStore = create<TimelineState>()(
       set((s) => {
         const clip = s.clips.find((c) => c.id === clipId);
         if (!clip) return;
-        clip.inPoint = inPoint;
-        clip.outPoint = outPoint;
-        clip.endTime = clip.startTime + (outPoint - inPoint);
+        const safeIn = Math.max(0, inPoint);
+        const safeOut = Math.max(safeIn + MIN_CLIP_DURATION, outPoint);
+        clip.inPoint = safeIn;
+        clip.outPoint = safeOut;
+        clip.endTime = clip.startTime + (safeOut - safeIn);
+      });
+      get().computeDuration();
+      useProjectStore.getState().markDirty();
+    },
+
+    trimClipStart: (clipId, inPoint, startTime) => {
+      set((s) => {
+        const clip = s.clips.find((c) => c.id === clipId);
+        if (!clip) return;
+        const safeStart = Math.max(0, startTime);
+        const safeIn = Math.min(Math.max(0, inPoint), clip.outPoint - MIN_CLIP_DURATION);
+        clip.startTime = safeStart;
+        clip.inPoint = safeIn;
+        clip.endTime = safeStart + (clip.outPoint - safeIn);
       });
       get().computeDuration();
       useProjectStore.getState().markDirty();
@@ -140,6 +159,30 @@ export const useTimelineStore = create<TimelineState>()(
       set((s) => {
         s.duration = maxEnd;
       });
+    },
+
+    arrangeSequentially: (trackIndex) => {
+      set((s) => {
+        const groups = new Map<number, TimelineClip[]>();
+        s.clips.forEach((clip) => {
+          if (trackIndex !== undefined && clip.trackIndex !== trackIndex) return;
+          if (!groups.has(clip.trackIndex)) groups.set(clip.trackIndex, []);
+          groups.get(clip.trackIndex)!.push(clip);
+        });
+
+        groups.forEach((trackClips) => {
+          trackClips.sort((a, b) => a.startTime - b.startTime);
+          let cursor = 0;
+          trackClips.forEach((clip) => {
+            const dur = Math.max(MIN_CLIP_DURATION, clip.outPoint - clip.inPoint);
+            clip.startTime = cursor;
+            clip.endTime = cursor + dur;
+            cursor = clip.endTime;
+          });
+        });
+      });
+      get().computeDuration();
+      useProjectStore.getState().markDirty();
     },
   }))
 );

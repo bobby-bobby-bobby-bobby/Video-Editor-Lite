@@ -65,6 +65,7 @@ export type EffectType =
   | "saturation"
   | "blur"
   | "speed"
+  | "greenscreen"
   | "grayscale"
   | "opacity";
 

@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from "react";
-import { useTimelineStore } from "../../store/timelineStore";
+import { MIN_CLIP_DURATION, useTimelineStore } from "../../store/timelineStore";
 import { useMediaStore } from "../../store/mediaStore";
 import { TimelineClip as TClip } from "../../types";
 import { formatTime } from "../../utils/formatTime";
@@ -18,6 +18,9 @@ export const Timeline: React.FC = () => {
   const removeClip = useTimelineStore((s) => s.removeClip);
   const moveClip = useTimelineStore((s) => s.moveClip);
   const setZoom = useTimelineStore((s) => s.setZoom);
+  const trimClip = useTimelineStore((s) => s.trimClip);
+  const trimClipStart = useTimelineStore((s) => s.trimClipStart);
+  const arrangeSequentially = useTimelineStore((s) => s.arrangeSequentially);
   const assets = useMediaStore((s) => s.assets);
   const scrollRef = useRef<HTMLDivElement>(null);
   const totalWidth = Math.max(duration * pixelsPerSecond + 200, 1000);
@@ -44,8 +47,15 @@ export const Timeline: React.FC = () => {
   return (
     <div className="flex h-full bg-[#0f0f1e] text-xs overflow-hidden" onWheel={handleWheel}>
       <div className="w-28 shrink-0 flex flex-col border-r border-[#2a2a4a]">
-        <div className="h-6 border-b border-[#2a2a4a] flex items-center px-2 text-[10px] text-[#555]">
+        <div className="h-6 border-b border-[#2a2a4a] flex items-center px-2 text-[10px] text-[#555] gap-1">
           <span>⌛ {formatTime(playhead)}</span>
+          <button
+            className="ml-auto px-1 py-0.5 rounded bg-[#1a1a2e] hover:bg-[#2a2a4a] text-[9px]"
+            onClick={() => arrangeSequentially()}
+            title="Pack clips in each track sequentially"
+          >
+            Pack
+          </button>
         </div>
         {tracks.map((track) => (
           <div
@@ -106,7 +116,10 @@ export const Timeline: React.FC = () => {
                       onSelect={() => selectClip(clip.id)}
                       onDelete={() => removeClip(clip.id)}
                       onMove={moveClip}
+                      onTrim={trimClip}
+                      onTrimStart={trimClipStart}
                       trackHeight={track.height}
+                      assetDuration={asset?.duration ?? 0}
                     />
                   );
                 })}
@@ -132,8 +145,24 @@ const ClipBlock: React.FC<{
   onSelect: () => void;
   onDelete: () => void;
   onMove: (clipId: string, newStart: number) => void;
+  onTrim: (clipId: string, inPoint: number, outPoint: number) => void;
+  onTrimStart: (clipId: string, inPoint: number, startTime: number) => void;
   trackHeight: number;
-}> = ({ clip, assetName, assetType, pixelsPerSecond, selected, onSelect, onDelete, onMove, trackHeight }) => {
+  assetDuration: number;
+}> = ({
+  clip,
+  assetName,
+  assetType,
+  pixelsPerSecond,
+  selected,
+  onSelect,
+  onDelete,
+  onMove,
+  onTrim,
+  onTrimStart,
+  trackHeight,
+  assetDuration,
+}) => {
   const left = clip.startTime * pixelsPerSecond;
   const width = Math.max((clip.endTime - clip.startTime) * pixelsPerSecond, 20);
   const dragStartRef = useRef<{ mouseX: number; startTime: number } | null>(null);
@@ -164,6 +193,54 @@ const ClipBlock: React.FC<{
     window.addEventListener("mouseup", onMouseUp);
   }, [clip.id, clip.startTime, pixelsPerSecond, onSelect, onMove]);
 
+  const handleTrimLeft = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelect();
+    const startMouseX = e.clientX;
+    const startIn = clip.inPoint;
+    const startOut = clip.outPoint;
+    const startTime = clip.startTime;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = (ev.clientX - startMouseX) / pixelsPerSecond;
+      const minDelta = -startTime;
+      const maxDelta = startOut - startIn - MIN_CLIP_DURATION;
+      const safeDelta = Math.max(minDelta, Math.min(delta, maxDelta));
+      onTrimStart(clip.id, startIn + safeDelta, startTime + safeDelta);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [clip.id, clip.inPoint, clip.outPoint, clip.startTime, pixelsPerSecond, onSelect, onTrimStart]);
+
+  const handleTrimRight = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelect();
+    const startMouseX = e.clientX;
+    const startOut = clip.outPoint;
+    const minOut = clip.inPoint + MIN_CLIP_DURATION;
+    const maxOut = assetDuration > 0 ? assetDuration : Number.POSITIVE_INFINITY;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = (ev.clientX - startMouseX) / pixelsPerSecond;
+      const nextOut = Math.max(minOut, Math.min(startOut + delta, maxOut));
+      onTrim(clip.id, clip.inPoint, nextOut);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [assetDuration, clip.id, clip.inPoint, clip.outPoint, onSelect, onTrim, pixelsPerSecond]);
+
   return (
     <div
       className={`clip-block absolute top-0.5 rounded border overflow-hidden cursor-grab active:cursor-grabbing select-none flex items-center px-2 text-[10px] text-white transition-opacity ${colorClass} ${
@@ -177,10 +254,20 @@ const ClipBlock: React.FC<{
       }}
       title={`${assetName} — double-click to remove`}
     >
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1.5 bg-white/20 hover:bg-white/40 cursor-ew-resize"
+        onMouseDown={handleTrimLeft}
+        title="Trim start"
+      />
       <span className="truncate pointer-events-none">{assetName}</span>
       <span className="ml-auto text-[9px] opacity-60 pointer-events-none">
         {formatTime(clip.endTime - clip.startTime)}
       </span>
+      <div
+        className="absolute right-0 top-0 bottom-0 w-1.5 bg-white/20 hover:bg-white/40 cursor-ew-resize"
+        onMouseDown={handleTrimRight}
+        title="Trim end"
+      />
     </div>
   );
 };
