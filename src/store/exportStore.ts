@@ -33,6 +33,8 @@ export const useExportStore = create<ExportState>()(
       }),
 
     exportProject: async () => {
+      if (get().isExporting) return;
+
       const { clips } = useTimelineStore.getState();
       const { assets } = useMediaStore.getState();
       const { effects } = useEffectsStore.getState();
@@ -53,10 +55,25 @@ export const useExportStore = create<ExportState>()(
 
       const { width, height } = parseResolution(get().resolution);
 
-      const exportClips = clips
-        .slice()
-        .sort((a, b) => a.startTime - b.startTime)
-        .map((clip) => {
+      set((s) => {
+        s.isExporting = true;
+        s.error = null;
+      });
+
+      try {
+        const sortedClips = clips.slice().sort((a, b) => a.startTime - b.startTime);
+        const distinctTracks = new Set(sortedClips.map((clip) => clip.trackIndex));
+        if (distinctTracks.size > 1) {
+          throw new Error("Export currently supports clips from one track at a time. Please pack to a single track before exporting.");
+        }
+
+        for (let i = 1; i < sortedClips.length; i++) {
+          if (sortedClips[i].startTime < sortedClips[i - 1].endTime - 1e-6) {
+            throw new Error("Export currently supports a non-overlapping timeline. Please remove overlaps before exporting.");
+          }
+        }
+
+        const exportClips = sortedClips.map((clip) => {
           const asset = assets.find((a) => a.id === clip.assetId);
           if (!asset) {
             throw new Error(`Missing asset for clip: ${clip.id}`);
@@ -67,6 +84,7 @@ export const useExportStore = create<ExportState>()(
 
           return {
             assetPath: asset.path,
+            mediaType: asset.type,
             inPoint: clip.inPoint,
             outPoint: clip.outPoint,
             trackIndex: clip.trackIndex,
@@ -75,12 +93,6 @@ export const useExportStore = create<ExportState>()(
           };
         });
 
-      set((s) => {
-        s.isExporting = true;
-        s.error = null;
-      });
-
-      try {
         await invoke("export_video", {
           params: {
             clips: exportClips,

@@ -41,12 +41,18 @@ pub struct ExportEffect {
 #[serde(rename_all = "camelCase")]
 pub struct ExportClip {
     pub asset_path: String,
+    #[serde(default = "default_export_media_type")]
+    pub media_type: String,
     pub in_point: f64,
     pub out_point: f64,
     pub track_index: u32,
     pub start_time: f64,
     #[serde(default)]
     pub effects: Vec<ExportEffect>,
+}
+
+fn default_export_media_type() -> String {
+    "video".to_string()
 }
 
 /// Parameters for the export command

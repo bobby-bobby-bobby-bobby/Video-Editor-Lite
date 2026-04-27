@@ -52,7 +52,9 @@ export const Layout: React.FC = () => {
             <option value="1280x720">720p</option>
             <option value="854x480">480p</option>
           </select>
-          <MenuButton onClick={exportProject}>{isExporting ? "Exporting…" : "Export"}</MenuButton>
+          <MenuButton onClick={exportProject} disabled={isExporting}>
+            {isExporting ? "Exporting…" : "Export"}
+          </MenuButton>
         </div>
         <div className="flex-1" />
         <span className="text-[#888] truncate max-w-[200px]">
@@ -95,13 +97,17 @@ export const Layout: React.FC = () => {
   );
 };
 
-const MenuButton: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({
+const MenuButton: React.FC<{ onClick: () => void; disabled?: boolean; children: React.ReactNode }> = ({
   onClick,
+  disabled = false,
   children,
 }) => (
   <button
     onClick={onClick}
-    className="px-2 py-1 rounded hover:bg-[#2a2a4a] text-[#e0e0e0] transition-colors"
+    disabled={disabled}
+    className={`px-2 py-1 rounded text-[#e0e0e0] transition-colors ${
+      disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-[#2a2a4a]"
+    }`}
   >
     {children}
   </button>

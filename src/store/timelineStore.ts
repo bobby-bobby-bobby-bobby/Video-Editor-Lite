@@ -9,7 +9,7 @@ const DEFAULT_TRACKS: TimelineTrack[] = [
   { id: "track-v2", label: "Video 2", type: "video", muted: false, locked: false, height: 60 },
   { id: "track-a1", label: "Audio 1", type: "audio", muted: false, locked: false, height: 40 },
 ];
-const MIN_CLIP_DURATION = 0.05;
+export const MIN_CLIP_DURATION = 0.05;
 
 interface TimelineState {
   clips: TimelineClip[];
@@ -27,6 +27,7 @@ interface TimelineState {
   removeClip: (clipId: string) => void;
   moveClip: (clipId: string, newStartTime: number, newTrackIndex?: number) => void;
   trimClip: (clipId: string, inPoint: number, outPoint: number) => void;
+  trimClipStart: (clipId: string, inPoint: number, startTime: number) => void;
   selectClip: (id: string | null) => void;
   setPlayhead: (time: number) => void;
   setZoom: (pps: number) => void;
@@ -103,6 +104,20 @@ export const useTimelineStore = create<TimelineState>()(
         clip.inPoint = safeIn;
         clip.outPoint = safeOut;
         clip.endTime = clip.startTime + (safeOut - safeIn);
+      });
+      get().computeDuration();
+      useProjectStore.getState().markDirty();
+    },
+
+    trimClipStart: (clipId, inPoint, startTime) => {
+      set((s) => {
+        const clip = s.clips.find((c) => c.id === clipId);
+        if (!clip) return;
+        const safeStart = Math.max(0, startTime);
+        const safeIn = Math.min(Math.max(0, inPoint), clip.outPoint - MIN_CLIP_DURATION);
+        clip.startTime = safeStart;
+        clip.inPoint = safeIn;
+        clip.endTime = safeStart + (clip.outPoint - safeIn);
       });
       get().computeDuration();
       useProjectStore.getState().markDirty();

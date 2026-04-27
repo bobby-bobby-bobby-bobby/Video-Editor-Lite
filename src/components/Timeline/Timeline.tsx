@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from "react";
-import { useTimelineStore } from "../../store/timelineStore";
+import { MIN_CLIP_DURATION, useTimelineStore } from "../../store/timelineStore";
 import { useMediaStore } from "../../store/mediaStore";
 import { TimelineClip as TClip } from "../../types";
 import { formatTime } from "../../utils/formatTime";
@@ -19,6 +19,7 @@ export const Timeline: React.FC = () => {
   const moveClip = useTimelineStore((s) => s.moveClip);
   const setZoom = useTimelineStore((s) => s.setZoom);
   const trimClip = useTimelineStore((s) => s.trimClip);
+  const trimClipStart = useTimelineStore((s) => s.trimClipStart);
   const arrangeSequentially = useTimelineStore((s) => s.arrangeSequentially);
   const assets = useMediaStore((s) => s.assets);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -116,6 +117,7 @@ export const Timeline: React.FC = () => {
                       onDelete={() => removeClip(clip.id)}
                       onMove={moveClip}
                       onTrim={trimClip}
+                      onTrimStart={trimClipStart}
                       trackHeight={track.height}
                       assetDuration={asset?.duration ?? 0}
                     />
@@ -144,6 +146,7 @@ const ClipBlock: React.FC<{
   onDelete: () => void;
   onMove: (clipId: string, newStart: number) => void;
   onTrim: (clipId: string, inPoint: number, outPoint: number) => void;
+  onTrimStart: (clipId: string, inPoint: number, startTime: number) => void;
   trackHeight: number;
   assetDuration: number;
 }> = ({
@@ -156,6 +159,7 @@ const ClipBlock: React.FC<{
   onDelete,
   onMove,
   onTrim,
+  onTrimStart,
   trackHeight,
   assetDuration,
 }) => {
@@ -200,10 +204,9 @@ const ClipBlock: React.FC<{
     const onMouseMove = (ev: MouseEvent) => {
       const delta = (ev.clientX - startMouseX) / pixelsPerSecond;
       const minDelta = -startTime;
-      const maxDelta = startOut - startIn - 0.05;
+      const maxDelta = startOut - startIn - MIN_CLIP_DURATION;
       const safeDelta = Math.max(minDelta, Math.min(delta, maxDelta));
-      onTrim(clip.id, startIn + safeDelta, startOut);
-      onMove(clip.id, startTime + safeDelta);
+      onTrimStart(clip.id, startIn + safeDelta, startTime + safeDelta);
     };
 
     const onMouseUp = () => {
@@ -213,14 +216,14 @@ const ClipBlock: React.FC<{
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [clip.id, clip.inPoint, clip.outPoint, clip.startTime, pixelsPerSecond, onMove, onSelect, onTrim]);
+  }, [clip.id, clip.inPoint, clip.outPoint, clip.startTime, pixelsPerSecond, onSelect, onTrimStart]);
 
   const handleTrimRight = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onSelect();
     const startMouseX = e.clientX;
     const startOut = clip.outPoint;
-    const minOut = clip.inPoint + 0.05;
+    const minOut = clip.inPoint + MIN_CLIP_DURATION;
     const maxOut = assetDuration > 0 ? assetDuration : Number.POSITIVE_INFINITY;
 
     const onMouseMove = (ev: MouseEvent) => {

@@ -17,7 +17,7 @@ export const VideoPreview: React.FC = () => {
   const setPlayhead = useTimelineStore((s) => s.setPlayhead);
   const getClipEffects = useEffectsStore((s) => s.getClipEffects);
 
-  const mediaRef = useRef<HTMLVideoElement>(null);
+  const mediaRef = useRef<HTMLMediaElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -167,11 +167,13 @@ export const VideoPreview: React.FC = () => {
         )}
 
         {activeAsset && isVideo && srcUrl && (
-          <video
-            ref={mediaRef}
-            src={srcUrl}
-            className="max-w-full max-h-full"
-            style={{ filter: previewFilter }}
+            <video
+              ref={(el) => {
+                mediaRef.current = el;
+              }}
+              src={srcUrl}
+              className="max-w-full max-h-full"
+              style={{ filter: previewFilter }}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => setIsPlaying(false)}
@@ -184,7 +186,9 @@ export const VideoPreview: React.FC = () => {
             <span className="text-6xl">🎵</span>
             <span className="text-sm text-[#e0e0e0]">{activeAsset.name}</span>
             <audio
-              ref={mediaRef as React.RefObject<HTMLAudioElement>}
+              ref={(el) => {
+                mediaRef.current = el;
+              }}
               src={srcUrl}
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
